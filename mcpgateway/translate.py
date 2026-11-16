@@ -123,7 +123,7 @@ import shlex
 import signal
 import sys
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 import uuid
 
 # Third-Party
@@ -1328,8 +1328,9 @@ async def _run_sse_to_stdio(url: str, oauth2_bearer: Optional[str] = None, timeo
                             LOGGER.debug(f"SSE event: {current_event.event} - {current_event.data[:100]}...")
 
                             if current_event.event == "endpoint":
-                                # Store the message endpoint URL
-                                message_endpoint = current_event.data
+                                # Store the message endpoint URL; the MCP SSE transport may send a
+                                # path relative to the SSE URL (e.g. "/messages/?session_id=...")
+                                message_endpoint = urljoin(url, current_event.data)
                                 LOGGER.info(f"Received message endpoint: {message_endpoint}")
 
                             elif current_event.event == "message":

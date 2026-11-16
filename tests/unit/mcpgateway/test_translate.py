@@ -1761,6 +1761,96 @@ async def test_run_sse_to_stdio_read_stdout_posts_status_202_and_process_already
 
 
 @pytest.mark.asyncio
+async def test_run_sse_to_stdio_resolves_relative_endpoint(monkeypatch, translate):
+    """A relative ``endpoint`` event (as sent by the MCP Python SDK SSE server) is resolved against the SSE URL."""
+    # Third-Party
+    import httpx as real_httpx
+
+    setattr(translate, "httpx", real_httpx)
+
+    endpoint_ready = asyncio.Event()
+    posts_done = asyncio.Event()
+
+    class Stdout:
+        def __init__(self):
+            self._lines = [b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n', b""]
+
+        async def readline(self):
+            await endpoint_ready.wait()
+            line = self._lines.pop(0)
+            if not line:
+                posts_done.set()
+            return line
+
+    class Proc:
+        def __init__(self):
+            self.stdin = _DummyWriter()
+            self.stdout = Stdout()
+            self.returncode = 0
+
+        def terminate(self):
+            pass
+
+        async def wait(self):
+            return 0
+
+    async def fake_create_subprocess_exec(*_a, **_k):
+        return Proc()
+
+    monkeypatch.setattr(translate.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self):
+            self.request = real_httpx.Request("GET", "http://dummy:8000/sse")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_a):
+            return None
+
+        async def aiter_lines(self):
+            yield "event: endpoint"
+            yield "data: /messages/?session_id=abc"
+            yield ""
+            endpoint_ready.set()
+            await posts_done.wait()
+            raise real_httpx.ConnectError("done", request=self.request)
+
+    class Client:
+        def __init__(self):
+            self.post_urls = []
+
+        def stream(self, *_a, **_k):
+            return Resp()
+
+        async def post(self, url, *_a, **_k):
+            self.post_urls.append(url)
+            return types.SimpleNamespace(status_code=202, text="ok")
+
+    client = Client()
+
+    # First-Party
+    from mcpgateway.services import http_client_service
+
+    class Ctx:
+        async def __aenter__(self):
+            return client
+
+        async def __aexit__(self, *_a):
+            return None
+
+    monkeypatch.setattr(http_client_service, "get_isolated_http_client", lambda **_k: Ctx())
+
+    with pytest.raises(real_httpx.ConnectError):
+        await translate._run_sse_to_stdio("http://dummy:8000/sse", None, stdio_command="echo test", max_retries=1, initial_retry_delay=0.0)
+
+    assert client.post_urls == ["http://dummy:8000/messages/?session_id=abc"]
+
+
+@pytest.mark.asyncio
 async def test_run_sse_to_stdio_pump_status_error_when_httpx_falsy_raises_generic_exception(monkeypatch, translate):
     """Cover pump status-code error branch when httpx is truthy for startup but falsy inside the status check."""
 
