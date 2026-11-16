@@ -255,7 +255,7 @@ Response:
     - Optional `scopes` supplied to `/auth/sso/login/{provider}` must be a subset of the provider's configured scope policy. Out-of-policy scopes are rejected with HTTP `400`.
 
 !!! important "One Email, One Provider"
-    A verified email is bound to the SSO provider it first signed in through. Signing in again with the same email from a *different* provider is refused by default (`SSO_ALLOW_PROVIDER_LINKING=false`) to stop account takeover via an unvetted provider. Set `SSO_ALLOW_PROVIDER_LINKING=true` to allow relinking — this is a global switch across all configured providers, not scoped to a specific pair, and admin status is always re-vetted against the new provider on relink (see [Configuration Reference](configuration.md)).
+    A verified email is bound to the SSO provider it first signed in through. Signing in again with the same email from a *different* provider is refused by default (`SSO_ALLOW_PROVIDER_LINKING=false`) to stop account takeover via an unvetted provider. Set `SSO_ALLOW_PROVIDER_LINKING=true` to allow relinking — this is a global switch across all configured providers, not scoped to a specific pair, and admin status is always re-vetted against the new provider on relink (see [Configuration Reference](configuration.md)). Relinking also requires the new provider to send an explicit verified-email claim (`email_verified=true` or an equivalent supported claim); a login that omits the claim is refused for an account bound to another provider.
 
 ## Provider Configuration
 

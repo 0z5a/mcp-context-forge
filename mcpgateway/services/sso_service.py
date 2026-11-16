@@ -1103,6 +1103,21 @@ class SSOService:
             return coerced
         return True
 
+    @staticmethod
+    def _has_explicit_verified_email_claim(user_info: Dict[str, Any]) -> bool:
+        """Check that the IdP positively asserted the email as verified.
+
+        Args:
+            user_info: Normalized user-info payload from provider.
+
+        Returns:
+            ``True`` only when a supported verification claim is present and
+            the first present claim is explicitly truthy.
+        """
+        if not any(claim in user_info for claim in SSOService._EMAIL_VERIFIED_CLAIMS):
+            return False
+        return SSOService._is_email_verified_claim(user_info)
+
     def get_authorization_url(
         self,
         provider_id: str,
@@ -2177,8 +2192,8 @@ class SSOService:
 
             provider_relinked = False
             if user.auth_provider and current_auth_provider != incoming_provider:
-                # Email is already verified (gated above) and within trusted-domain policy,
-                # so linking here only ever rebinds a trusted, verified identity.
+                # Email is within trusted-domain policy and not flagged unverified (gated above).
+                # Rebinding additionally requires an explicit verified-email claim, checked below.
                 if provider is None:
                     # Can't re-vet admin status against a provider we can't resolve (deleted
                     # between callback and this call, or an id-casing mismatch) — refusing here
@@ -2194,6 +2209,15 @@ class SSOService:
                     logger.warning(
                         "SSO authenticate_or_create_user: login refused for email '%s' — it is bound to provider '%s' and sign-in came from '%s'. "
                         "One email maps to one provider unless SSO_ALLOW_PROVIDER_LINKING is enabled.",
+                        email,
+                        current_auth_provider,
+                        incoming_provider,
+                    )
+                    return None
+                if not self._has_explicit_verified_email_claim(user_info):
+                    logger.warning(
+                        "SSO authenticate_or_create_user: login refused for email '%s' — it is bound to provider '%s' and provider '%s' did not supply a verified-email claim. "
+                        "Relinking requires the provider to assert the email as verified.",
                         email,
                         current_auth_provider,
                         incoming_provider,
