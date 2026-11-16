@@ -662,8 +662,8 @@ def is_trusted_internal_runtime_request(
 
     The trust boundary is the HMAC header and, when required, the encoded
     ``x-contextforge-auth-context``. The loopback check is defense in depth,
-    not an independent gate: ProxyHeaders(trusted_hosts="*") lets a direct
-    external caller influence ``request.client.host`` (the replay is hardened
+    not an independent gate: a peer listed in ``FORWARDED_ALLOW_IPS`` can
+    influence ``request.client.host`` (the replay is hardened
     separately by stripping forwarded / client-IP headers).
 
     Args:
